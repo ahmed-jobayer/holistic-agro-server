@@ -11,21 +11,21 @@ const port = process.env.PORT || 4000;
 app.use("/files", express.static("files"));
 
 // middleware
+
+app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:3000",
-    // origin: "https://holistic-agro-by-jobayer.surge.sh",
+    origin: ["http://localhost:3000", "https://holisticlimited.com", "https://www.holisticlimited.com"],
     optionsSuccessStatus: 200,
   })
 );
-app.use(express.json());
 
 // token verification
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
   if (!authorization) {
-    return res.send({ message: "No Token" });
+    return res.status(401).send({ message: "No Token" });
   }
   const token = authorization.split(" ")[1];
   jwt.verify(token, process.env.ACCESS_KEY_TOKEN, (error, decoded) => {
@@ -50,7 +50,7 @@ const verifyAdmin = async (req, res, next) => {
 };
 
 // mongodb
-const url = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ugffr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
+const url = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ugffr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(url, {
   serverApi: {
@@ -60,12 +60,20 @@ const client = new MongoClient(url, {
   },
 });
 
-mongoose
-  .connect(
-    `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ugffr.mongodb.net/HolisticAgro?retryWrites=true&w=majority&appName=Cluster0`
-  )
-  .then(() => console.log("Mongoose connected to MongoDB"))
-  .catch((err) => console.error("Mongoose connection error:", err));
+// Mongoose connection for file upload only
+const connectMongoose = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return; // Avoid reconnecting if already connected
+  }
+  try {
+    await mongoose.connect(
+      `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ugffr.mongodb.net/HolisticAgro?retryWrites=true&w=majority&appName=Cluster0`
+    );
+    console.log("Mongoose connected for file upload");
+  } catch (error) {
+    console.error("Mongoose connection error:", error);
+  }
+};
 
 const userCollection = client.db("HolisticAgro").collection("users");
 const productCollection = client.db("HolisticAgro").collection("products");
@@ -75,14 +83,18 @@ const couponCollection = client.db("HolisticAgro").collection("coupons");
 const employeCollection = client.db("HolisticAgro").collection("employees");
 const jobCollection = client.db("HolisticAgro").collection("jobs");
 const banner = client.db("HolisticAgro").collection("banner");
-const problemAndSolutionCollection = client.db("HolisticAgro").collection("problemAndSolution");
+const problemAndSolutionCollection = client
+  .db("HolisticAgro")
+  .collection("problemAndSolution");
 
 const dbConnect = async () => {
   try {
     client.connect();
     console.log("Database Connected");
+    
 
-    // get nanner
+
+    // get banner
 
     app.get("/banner", async (req, res) => {
       try {
@@ -208,20 +220,16 @@ const dbConnect = async () => {
     // delete product with id
     app.delete("/delete-product/:id", async (req, res) => {
       const id = req.params.id;
-      // console.log(id);
       const result = await productCollection.deleteOne({
         _id: new ObjectId(String(id)),
       });
-      // console.log(result);
       res.send(result);
     });
 
     // add categories
     app.post("/add-category", verifyJWT, verifyAdmin, async (req, res) => {
       const category = req.body;
-      console.log(category);
       const result = await categoryCollection.insertOne(category);
-      console.log(result);
       res.send(result);
     });
 
@@ -229,7 +237,6 @@ const dbConnect = async () => {
     app.get("/categories", async (req, res) => {
       try {
         const result = await categoryCollection.find().toArray(); // Convert cursor to array
-        // console.log(result)
         res.send(result); // Send the array as the response
       } catch (error) {
         console.error("Error fetching categories:", error.message);
@@ -244,11 +251,11 @@ const dbConnect = async () => {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        // console.log(id);
+
         const result = await categoryCollection.deleteOne({
           _id: new ObjectId(String(id)),
         });
-        // console.log(result);
+
         res.send(result);
       }
     );
@@ -274,7 +281,7 @@ const dbConnect = async () => {
         };
 
         const result = await userCollection.updateOne(query, updatedDoc);
-        // console.log(result, cartProduct, userPhone);
+
         if (result.matchedCount > 0 && result.modifiedCount === 0) {
           res.send({
             message: "Product is already in the cart",
@@ -294,70 +301,13 @@ const dbConnect = async () => {
       }
     });
 
-    // app.delete("/remove-from-cart", verifyJWT, async (req, res) => {
-    //   const title = req.query.title; // The title of the item to be removed
-    //   const userPhone = req.decoded.phone; // Get the user's phone number from the JWT
-
-    //   try {
-    //     // Find the user by phone and update the cart
-    //     const query = { phone: userPhone };
-    //     const update = { $pull: { cart: { title } } };
-
-    //     const result = await userCollection.updateOne(query, update);
-    //     console.log(title, userPhone, result);
-    //     if (result.modifiedCount > 0) {
-    //       res.status(200).send({
-    //         message: "Item removed from the cart successfully",
-    //         result,
-    //       });
-    //     } else {
-    //       res.status(404).send({
-    //         message: "Item not found in the cart or user not found",
-    //       });
-    //     }
-    //   } catch (error) {
-    //     console.error("Error removing item from cart:", error.message);
-    //     res.status(500).send({
-    //       error: "Failed to remove item from cart",
-    //     });
-    //   }
-    // });
-
-    // Update quantity in the cart
-    // app.patch("/update-cart-quantity", verifyJWT, async (req, res) => {
-    //   const { title, quantityChange } = req.body; // `quantityChange` is +1 or -1
-    //   const userPhone = req.decoded.phone;
-
-    //   try {
-    //     const query = { phone: userPhone, "cart.title": title };
-    //     const update = { $inc: { "cart.$.quantity": quantityChange } };
-
-    //     const result = await userCollection.updateOne(query, update);
-
-    //     if (result.modifiedCount > 0) {
-    //       res
-    //         .status(200)
-    //         .send({ message: "Quantity updated successfully", result });
-    //     } else {
-    //       res
-    //         .status(404)
-    //         .send({ message: "Item not found in the cart or user not found" });
-    //     }
-    //   } catch (error) {
-    //     console.error("Error updating quantity:", error.message);
-    //     res.status(500).send({ error: "Failed to update quantity" });
-    //   }
-    // });
-
     // add orders
     app.post("/add-order", verifyJWT, async (req, res) => {
       const orderProduct = req.body;
       const userLoginNumber = req.decoded.phone;
       const orderData = { userLoginNumber, ...orderProduct };
-      // console.log(orderData);
       try {
         const result = await orderCollection.insertOne(orderData);
-        // console.log(result);
         // clear user cart
         if (result.insertedId) {
           const query = { phone: userLoginNumber };
@@ -426,9 +376,7 @@ const dbConnect = async () => {
     // add coupons
     app.post("/add-coupon", verifyJWT, verifyAdmin, async (req, res) => {
       const coupon = req.body;
-      console.log(coupon);
       const result = await couponCollection.insertOne(coupon);
-      console.log(result);
       res.send(result);
     });
 
@@ -439,11 +387,9 @@ const dbConnect = async () => {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        console.log(id);
         const result = await couponCollection.deleteOne({
           _id: new ObjectId(String(id)),
         });
-        // console.log(result);
         res.send(result);
       }
     );
@@ -476,7 +422,7 @@ const dbConnect = async () => {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        console.log(id);
+        // console.log(id);
         const result = await employeCollection.deleteOne({
           _id: new ObjectId(String(id)),
         });
@@ -579,13 +525,12 @@ const pdfSchema = mongoose.model("pdfDetails");
 const upload = multer({ storage: storage });
 
 app.post("/upload-files", upload.single("file"), async (req, res) => {
-  // console.log(req.file);
-  const name = req.body.name;
-  const email = req.body.email;
-  const phone = req.body.phone;
+  await connectMongoose(); // Ensure Mongoose is connected before upload
+  const { name, email, phone } = req.body;
   const fileName = req.file.filename;
+
   try {
-    await pdfSchema.create({ name: name, email: email, phone: phone, pdf: fileName });
+    await pdfSchema.create({ name, email, phone, pdf: fileName });
     res.send({ status: "ok" });
   } catch (error) {
     res.json({ status: error });
@@ -593,32 +538,32 @@ app.post("/upload-files", upload.single("file"), async (req, res) => {
 });
 
 app.get("/get-files", async (req, res) => {
+  await connectMongoose(); // Ensure connection before fetching
   try {
     pdfSchema.find({}).then((data) => {
-      res.send({ status: "ok", data: data });
+      res.send({ status: "ok", data });
     });
-  } catch (error) {}
+  } catch (error) {
+    res.json({ status: error });
+  }
 });
 
-// delete file with id
-app.delete("/delete-file/:id", verifyJWT, verifyAdmin, async (req, res) => {
+app.delete("/delete-file/:id", async (req, res) => {
+  await connectMongoose();
   try {
     const { id } = req.params;
-    
-    // Find the document first to get the filename
     const document = await pdfSchema.findById(id);
+
     if (!document) {
       return res.status(404).send({ message: "Document not found" });
     }
 
-    // Delete from database
     await pdfSchema.findByIdAndDelete(id);
 
-    // Delete the physical file
-    const fs = require('fs');
-    const path = require('path');
-    const filePath = path.join(__dirname, 'files', document.pdf);
-    
+    const fs = require("fs");
+    const path = require("path");
+    const filePath = path.join(__dirname, "files", document.pdf);
+
     fs.unlink(filePath, (err) => {
       if (err) {
         console.error("Error deleting file:", err);
